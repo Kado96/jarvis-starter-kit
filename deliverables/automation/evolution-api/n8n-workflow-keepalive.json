@@ -1,0 +1,243 @@
+{
+  "name": "Jarvis — Evolution API Keep-Alive (Daily)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Toutes les 6 heures",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://jarvis-evolution-api.onrender.com/instance/fetchInstances",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "jarvis-evolution-2026"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "check-instances",
+      "name": "Vérifier Instances",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyse le statut de la connexion\n// NE DÉCONNECTE PAS — vérifie seulement\nconst instances = $input.first().json;\nconst arr = Array.isArray(instances) ? instances : [instances];\n\nlet instanceFound = false;\nlet isConnected = false;\nlet state = 'unknown';\n\nfor (const inst of arr) {\n  const name = inst.instance?.instanceName || inst.instanceName || '';\n  if (name === 'jarvis-principal') {\n    instanceFound = true;\n    state = inst.instance?.state || inst.state || 'unknown';\n    // 'open' = session WhatsApp active et valide\n    isConnected = (state === 'open');\n    break;\n  }\n}\n\nreturn [{ \n  json: { \n    instanceFound,\n    isConnected, \n    state,\n    timestamp: new Date().toISOString(),\n    needsAction: !instanceFound || !isConnected\n  } \n}];"
+      },
+      "id": "check-status",
+      "name": "Analyser Statut",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-action",
+              "leftValue": "={{ $json.needsAction }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-needs-action",
+      "name": "Action Requise?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Connexion OK — on ne touche à RIEN\n// La session WhatsApp reste intacte\nconst { state, timestamp } = $input.first().json;\nconsole.log(`[${timestamp}] ✅ Jarvis WhatsApp — Connexion OK (state: ${state})`);\nreturn [{ json: { status: 'ok', state, timestamp, action: 'none' } }];"
+      },
+      "id": "log-ok",
+      "name": "✅ Connexion OK — Rien à faire",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Détermine le type de problème\nconst { instanceFound, state, timestamp } = $input.first().json;\n\nlet problem = '';\nlet recommendation = '';\n\nif (!instanceFound) {\n  problem = 'Instance jarvis-principal introuvable (Evolution API redémarré, volume effacé?)';\n  recommendation = 'Evolution API a peut-être perdu les données de session. Ouvre le lien QR Code et rescanne.';\n} else if (state === 'connecting') {\n  problem = 'WhatsApp en cours de connexion...';\n  recommendation = 'Attendre 2-3 minutes, le service va se reconnecter automatiquement.';\n} else if (state === 'close') {\n  problem = 'Session WhatsApp fermée (WhatsApp a déconnecté le device)';\n  recommendation = 'Ouvre le lien QR Code et rescanne depuis WhatsApp > Appareils connectés.';\n} else {\n  problem = `État inconnu: ${state}`;\n  recommendation = 'Vérifier manuellement https://jarvis-evolution-api.onrender.com';\n}\n\nconsole.log(`[${timestamp}] ⚠️ Problème détecté: ${problem}`);\n\nreturn [{ json: { problem, recommendation, state, timestamp, instanceFound } }];"
+      },
+      "id": "analyze-problem",
+      "name": "Analyser le Problème",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "instance-not-found",
+              "leftValue": "={{ $json.instanceFound }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-instance-lost",
+      "name": "Instance Perdue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jarvis-evolution-api.onrender.com/instance/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "jarvis-evolution-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"instanceName\": \"jarvis-principal\",\n  \"token\": \"jarvis-evolution-2026\",\n  \"qrcode\": true,\n  \"webhook\": \"https://n8n-ajs5.onrender.com/webhook/jarvis-wa-evolution\",\n  \"webhook_by_events\": false,\n  \"events\": [\"MESSAGES_UPSERT\"]\n}",
+        "options": {}
+      },
+      "id": "recreate-instance",
+      "name": "Recréer Instance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jarvis-evolution-api.onrender.com/message/sendText/jarvis-principal",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "jarvis-evolution-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"25779928864\",\n  \"text\": \"⚠️ JARVIS ALERTE\\n\\nProblème WhatsApp détecté à {{ $('Analyser le Problème').first().json.timestamp }}\\n\\n🔴 Problème: {{ $('Analyser le Problème').first().json.problem }}\\n\\n✅ Recommandation: {{ $('Analyser le Problème').first().json.recommendation }}\\n\\n🔗 Lien QR: https://jarvis-evolution-api.onrender.com/instance/connect/jarvis-principal\"\n}",
+        "options": {}
+      },
+      "id": "send-alert",
+      "name": "Envoyer Alerte WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 280]
+    }
+  ],
+  "connections": {
+    "Toutes les 6 heures": {
+      "main": [
+        [{ "node": "Vérifier Instances", "type": "main", "index": 0 }]
+      ]
+    },
+    "Vérifier Instances": {
+      "main": [
+        [{ "node": "Analyser Statut", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analyser Statut": {
+      "main": [
+        [{ "node": "Action Requise?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Action Requise?": {
+      "main": [
+        [{ "node": "Analyser le Problème", "type": "main", "index": 0 }],
+        [{ "node": "✅ Connexion OK — Rien à faire", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analyser le Problème": {
+      "main": [
+        [{ "node": "Instance Perdue?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Instance Perdue?": {
+      "main": [
+        [{ "node": "Recréer Instance", "type": "main", "index": 0 }],
+        [{ "node": "Envoyer Alerte WhatsApp", "type": "main", "index": 0 }]
+      ]
+    },
+    "Recréer Instance": {
+      "main": [
+        [{ "node": "Envoyer Alerte WhatsApp", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "jarvis-keepalive-v2",
+  "triggerCount": 1,
+  "tags": [
+    { "id": "1", "name": "whatsapp" },
+    { "id": "2", "name": "keep-alive" },
+    { "id": "3", "name": "evolution-api" }
+  ]
+}

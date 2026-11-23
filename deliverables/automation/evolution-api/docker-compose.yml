@@ -1,0 +1,43 @@
+version: '3.8'
+
+# ============================================================
+# Evolution API — WhatsApp QR Code Gateway
+# Pour test LOCAL uniquement (reference)
+# Deployment: Render + Koyeb (Cloud, pas besoin de machine allumee)
+# ============================================================
+
+services:
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: jarvis-evolution-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      # URL publique du serveur (a remplacer par l'URL Render/Koyeb apres deploy)
+      - SERVER_URL=http://localhost:8080
+
+      # Cle d'API Evolution (ne pas changer — utilisee dans n8n aussi)
+      - AUTHENTICATION_API_KEY=jarvis-evolution-2026
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+
+      # Webhook vers n8n
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_URL=https://n8n-ajs5.onrender.com/webhook/jarvis-wa-evolution
+      - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
+
+      # Pas de base de données externe (stockage local dans le conteneur)
+      - DATABASE_ENABLED=false
+
+      # Garder les instances meme si le QR expire
+      - DEL_INSTANCE=false
+
+      # Version WhatsApp Web (stable)
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1023204200
+
+    volumes:
+      - evolution_data:/evolution/instances
+
+volumes:
+  evolution_data:
+    driver: local

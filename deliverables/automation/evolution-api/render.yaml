@@ -1,0 +1,55 @@
+# ============================================================
+# render.yaml — Deploiement Evolution API sur Render
+# Service: jarvis-evolution-api
+# Region: Frankfurt (EU, plus proche de Burundi)
+# Plan: Free (starter)
+# ============================================================
+
+services:
+  - type: web
+    name: jarvis-evolution-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: frankfurt
+    plan: free
+
+    # Variables d'environnement
+    envVars:
+      # URL de ce service sur Render (Render la genere automatiquement)
+      - key: SERVER_URL
+        value: https://jarvis-evolution-api.onrender.com
+
+      # Cle API Evolution — utilisee dans tous les appels HTTP
+      - key: AUTHENTICATION_API_KEY
+        value: jarvis-evolution-2026
+
+      - key: AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES
+        value: "true"
+
+      # Webhook vers n8n — envoie les messages WhatsApp recus
+      - key: WEBHOOK_GLOBAL_ENABLED
+        value: "true"
+
+      - key: WEBHOOK_GLOBAL_URL
+        value: https://n8n-ajs5.onrender.com/webhook/jarvis-wa-evolution
+
+      - key: WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS
+        value: "false"
+
+      # Pas de base de données externe
+      - key: DATABASE_ENABLED
+        value: "false"
+
+      # Garder les instances QR meme apres expiration
+      - key: DEL_INSTANCE
+        value: "false"
+
+      # Version WhatsApp Web stable
+      - key: CONFIG_SESSION_PHONE_VERSION
+        value: "2.3000.1023204200"
+
+    # Disque persistant pour stocker les sessions QR
+    disk:
+      name: evolution-data
+      mountPath: /evolution/instances
+      sizeGB: 1

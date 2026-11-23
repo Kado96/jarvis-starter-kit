@@ -1,0 +1,194 @@
+{
+  "name": "Jarvis WA — Evolution API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-wa-evolution",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "jarvis-wa-evolution"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body || raw;\n\n// Normaliser le nom d'événement (v1/v2)\nconst event = String(body.event || body.type || '').toLowerCase().replace(/_/g, '.');\nconst isMessageEvent = event === 'messages.upsert' || event.endsWith('messages.upsert');\nif (!isMessageEvent && body.data?.key == null && !body.data?.messages) {\n  return [{ json: { skip: true, reason: 'not_a_message_event', event: body.event } }];\n}\n\n// Evolution v2: data = message ; v1: data.messages[0]\nlet msg = null;\nif (body.data?.messages?.[0]) {\n  msg = body.data.messages[0];\n} else if (body.data?.key) {\n  msg = body.data;\n} else if (body.key) {\n  msg = body;\n}\n\nif (!msg) {\n  return [{ json: { skip: true, reason: 'no_message_data', keys: Object.keys(body || {}) } }];\n}\n\nif (msg.key?.fromMe === true) {\n  return [{ json: { skip: true, reason: 'from_me' } }];\n}\n\nconst remoteJid = msg.key?.remoteJid || '';\n// Ignorer groupes / status / newsletters\nif (remoteJid.includes('@g.us') || remoteJid.includes('status@broadcast') || remoteJid.includes('@newsletter')) {\n  return [{ json: { skip: true, reason: 'not_direct_chat', remoteJid } }];\n}\n\nconst from = remoteJid\n  .replace('@s.whatsapp.net', '')\n  .replace('@c.us', '')\n  .replace(/:\\d+$/, '')\n  .replace(/\\D/g, '');\n\nconst m = msg.message || {};\nconst text = (\n  m.conversation\n  || m.extendedTextMessage?.text\n  || m.imageMessage?.caption\n  || m.videoMessage?.caption\n  || m.buttonsResponseMessage?.selectedDisplayText\n  || m.listResponseMessage?.title\n  || m.templateButtonReplyMessage?.selectedDisplayText\n  || ''\n).trim();\n\nif (!text) {\n  return [{ json: { skip: true, reason: 'empty_text', messageType: msg.messageType } }];\n}\n\nconst OWNER = '25779928864';\nif (from !== OWNER) {\n  return [{ json: { skip: true, reason: 'unauthorized', from } }];\n}\n\nreturn [{\n  json: {\n    skip: false,\n    from,\n    text,\n    instanceName: body.instance || 'jarvis-principal',\n    messageId: msg.key?.id || null\n  }\n}];"
+      },
+      "id": "parse-message",
+      "name": "Parse Message Evolution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-skip",
+      "name": "Est autorisé?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OPENROUTER_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n-ajs5.onrender.com"
+            },
+            {
+              "name": "X-Title",
+              "value": "Jarvis WA"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-4o-mini\",\n  \"max_tokens\": 300,\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"Tu es Jarvis, l'assistant IA personnel de Donald. Réponds de manière concise, utile et en français.\"},\n    {\"role\": \"user\", \"content\": {{ JSON.stringify($json.text) }}\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "openrouter-ai",
+      "name": "OpenRouter AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json.choices?.[0]?.message?.content\n  || $input.first().json.error?.message\n  || 'Désolé, je n\\'ai pas pu générer une réponse.';\nconst from = $('Parse Message Evolution').first().json.from;\nconst instanceName = $('Parse Message Evolution').first().json.instanceName || 'jarvis-principal';\nreturn [{ json: { replyText: String(aiResponse).slice(0, 3500), to: from, instanceName } }];"
+      },
+      "id": "extract-reply",
+      "name": "Extraire Réponse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://jarvis-evolution-api.onrender.com/message/sendText/{{ $json.instanceName }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "jarvis-evolution-2026"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": {{ JSON.stringify($json.to) }},\n  \"text\": {{ JSON.stringify($json.replyText) }},\n  \"textMessage\": { \"text\": {{ JSON.stringify($json.replyText) }} }\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "send-whatsapp",
+      "name": "Envoyer WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Evolution": {
+      "main": [
+        [
+          { "node": "Respond 200 OK", "type": "main", "index": 0 },
+          { "node": "Parse Message Evolution", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Message Evolution": {
+      "main": [
+        [{ "node": "Est autorisé?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Est autorisé?": {
+      "main": [
+        [{ "node": "OpenRouter AI", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "OpenRouter AI": {
+      "main": [
+        [{ "node": "Extraire Réponse AI", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extraire Réponse AI": {
+      "main": [
+        [{ "node": "Envoyer WhatsApp", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "jarvis-evolution-v2",
+  "triggerCount": 1,
+  "tags": [
+    { "createdAt": "2026-11-23", "updatedAt": "2026-11-23", "id": "1", "name": "whatsapp" },
+    { "createdAt": "2026-11-23", "updatedAt": "2026-11-23", "id": "2", "name": "jarvis" },
+    { "createdAt": "2026-11-23", "updatedAt": "2026-11-23", "id": "3", "name": "evolution-api" }
+  ]
+}
