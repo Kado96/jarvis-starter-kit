@@ -2,7 +2,10 @@
 # render.yaml — Deploiement Evolution API sur Render
 # Service: jarvis-evolution-api
 # Region: Frankfurt (EU, plus proche de Burundi)
-# Plan: Free (starter)
+# Plan: Free
+# NOTE: Evolution API v2 exige PostgreSQL (Supabase OK).
+#       Dans Render Dashboard, définir DATABASE_CONNECTION_URI
+#       = ta DATABASE_URL Supabase + ?schema=evolution_api
 # ============================================================
 
 services:
@@ -13,20 +16,19 @@ services:
     region: frankfurt
     plan: free
 
-    # Variables d'environnement
     envVars:
-      # URL de ce service sur Render (Render la genere automatiquement)
       - key: SERVER_URL
         value: https://jarvis-evolution-api.onrender.com
 
-      # Cle API Evolution — utilisee dans tous les appels HTTP
+      - key: SERVER_PORT
+        value: "8080"
+
       - key: AUTHENTICATION_API_KEY
         value: jarvis-evolution-2026
 
       - key: AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES
         value: "true"
 
-      # Webhook vers n8n — envoie les messages WhatsApp recus
       - key: WEBHOOK_GLOBAL_ENABLED
         value: "true"
 
@@ -36,19 +38,49 @@ services:
       - key: WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS
         value: "false"
 
-      # Pas de base de données externe
-      - key: DATABASE_ENABLED
+      # --- PostgreSQL (obligatoire en v2) ---
+      - key: DATABASE_PROVIDER
+        value: postgresql
+
+      # À renseigner dans le dashboard Render (ne pas committer le secret) :
+      # postgresql://...@....pooler.supabase.com:5432/postgres?schema=evolution_api
+      - key: DATABASE_CONNECTION_URI
+        sync: false
+
+      - key: DATABASE_CONNECTION_CLIENT_NAME
+        value: jarvis_evolution
+
+      - key: DATABASE_SAVE_DATA_INSTANCE
+        value: "true"
+
+      - key: DATABASE_SAVE_DATA_NEW_MESSAGE
         value: "false"
 
-      # Garder les instances QR meme apres expiration
+      - key: DATABASE_SAVE_MESSAGE_UPDATE
+        value: "false"
+
+      - key: DATABASE_SAVE_DATA_CONTACTS
+        value: "false"
+
+      - key: DATABASE_SAVE_DATA_CHATS
+        value: "false"
+
+      # Cache local (pas besoin de Redis sur Render Free)
+      - key: CACHE_REDIS_ENABLED
+        value: "false"
+
+      - key: CACHE_LOCAL_ENABLED
+        value: "true"
+
       - key: DEL_INSTANCE
         value: "false"
 
-      # Version WhatsApp Web stable
       - key: CONFIG_SESSION_PHONE_VERSION
         value: "2.3000.1023204200"
 
-    # Disque persistant pour stocker les sessions QR
+      - key: LOG_LEVEL
+        value: "ERROR,WARN,INFO"
+
     disk:
       name: evolution-data
       mountPath: /evolution/instances

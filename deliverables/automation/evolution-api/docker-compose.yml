@@ -26,8 +26,12 @@ services:
       - WEBHOOK_GLOBAL_URL=https://n8n-ajs5.onrender.com/webhook/jarvis-wa-evolution
       - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
 
-      # Pas de base de données externe (stockage local dans le conteneur)
-      - DATABASE_ENABLED=false
+      # PostgreSQL obligatoire (v2) — pointe vers Supabase en local aussi
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=${DATABASE_URL}?schema=evolution_api
+      - DATABASE_CONNECTION_CLIENT_NAME=jarvis_evolution
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
 
       # Garder les instances meme si le QR expire
       - DEL_INSTANCE=false
