@@ -26,7 +26,7 @@ Evolution API → WhatsApp (réponse envoyée)
 
 | Fichier | Usage |
 |---|---|
-| `Dockerfile` | Image Docker (wraps atendai/evolution-api) |
+| `Dockerfile` | Image Docker (wraps evoapicloud/evolution-api:v2.3.7) |
 | `docker-compose.yml` | Test local uniquement (référence) |
 | `render.yaml` | Config Render (déploiement automatique) |
 | `n8n-workflow-jarvis-wa-evolution.json` | Workflow n8n à importer (réponses WA) |
@@ -127,7 +127,7 @@ La réponse contient un `base64` ou une URL vers le QR Code à scanner.
 
 1. Va sur https://app.koyeb.com
 2. **Create App** → **Docker**
-3. **Docker image** : `atendai/evolution-api:latest`
+3. **Docker image** : `evoapicloud/evolution-api:v2.3.7`
 4. **Port** : `8080`
 5. **App name** : `jarvis-evolution-api`
 6. **Region** : Frankfurt
